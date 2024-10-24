@@ -59,6 +59,10 @@
             "label": "Odin"
         },
         {
+            "id": "22",
+            "label": "Kylo"
+        },
+        {
             "id": "24",
             "label": "Cohen"
         }
@@ -183,6 +187,22 @@
         {
             "source": "9",
             "target": "21"
+        },
+        { 
+            "source": "9",
+            "target": "17"
+        },
+        {
+            "source": "9",
+            "target": "21"
+        },
+        {
+            "source": "2",
+            "target": "10"
+        },
+        {
+            "source": "2",
+            "target": "22"
         }
     ]
 }
