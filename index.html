@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rome</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js" crossorigin="anonymous"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+        crossorigin="anonymous"></script>
+</head>
+
+<body>
+
+    <script>
+        window.counter = 0;
+
+        const steps = 1000;
+        // smol grafo2693.13
+        // midge grafo634.24
+        // yuge grafo1034.29
+        d3.json("./data/racoon.json").then(function (data) {
+            window.data = data;
+
+            data.nodes.forEach(function (node) {
+                node.degree = data.links.reduce(function (count, link) {
+                    return count + (link.source === node.id || link.target === node.id ? 1 : 0);
+                }, 0);
+            });
+            // console.log(data.links);
+            data.nodes.sort(function (a, b) {
+                return a.degree - b.degree;
+            });
+
+
+            // Pick the node with the highest degree as the root
+            let rootNode = data.nodes[data.nodes.length - 1]; // Since nodes are sorted by degree
+
+            // Generate the spanning tree links starting from the root node
+            treeLinks = [];
+            visited = new Set();
+            queue = [rootNode];
+
+            while (queue.length > 0) {
+                let node = queue.shift();
+                visited.add(node.id);
+
+                data.links.forEach(link => {
+                    let sourceNode = typeof link.source === 'object' ? link.source.id : link.source;
+                    let targetNode = typeof link.target === 'object' ? link.target.id : link.target;
+
+                    if (sourceNode === node.id && !visited.has(targetNode)) {
+                        treeLinks.push(link);
+                        queue.push(data.nodes.find(n => n.id === targetNode));
+                        visited.add(targetNode);
+                    } else if (targetNode === node.id && !visited.has(sourceNode)) {
+                        treeLinks.push(link);
+                        queue.push(data.nodes.find(n => n.id === sourceNode));
+                        visited.add(sourceNode);
+                    }
+                });
+            }
+
+            // Sort the nodes according to their appearance in the spanning tree
+            data.nodes.sort(function (a, b) {
+                return treeLinks.some(treeLink => treeLink.source === a.id || treeLink.target === a.id) ? -1 : 1;
+            });
+            // Create steps to draw the tree without disconnected components
+            let steps = [];
+            let stepNodes = new Set();
+            let stepLinks = [];
+
+            treeLinks.forEach(link => {
+                if (!stepNodes.has(link.source)) {
+                    stepNodes.add(link.source);
+                    steps.push({ nodes: Array.from(stepNodes), links: [...stepLinks] });
+                }
+                if (!stepNodes.has(link.target)) {
+                    stepNodes.add(link.target);
+                    steps.push({ nodes: Array.from(stepNodes), links: [...stepLinks] });
+                }
+                stepLinks.push(link);
+                steps.push({ nodes: Array.from(stepNodes), links: [...stepLinks] });
+            });
+
+            let lastStep = steps[steps.length - 1].links;
+
+            // Add all missing links from data.links to the last step
+            data.links.forEach(link => {
+                if (!lastStep.some(l => l.source === link.source && l.target === link.target)) {
+                    lastStep.push(link);
+                }
+            });
+
+            window.steps = lastStep;
+            window.steps.forEach(function (step) {
+                // console.log(step.source, step.target);
+                let sourceNode = data.nodes.find(node => node.id === step.source);
+                let targetNode = data.nodes.find(node => node.id === step.target);
+                console.log(`From: ${sourceNode.label}, To: ${targetNode.label}`);
+            });
+
+            window.existingNodes = [];
+
+            var width = 1800
+            var height = 1000;
+
+            var svg = d3.select("#graph");
+
+            var g = svg.append("g");
+
+            var zoom = d3.zoom()
+                .scaleExtent([0.1, 10])
+                .on("zoom", function (event) {
+                    g.attr("transform", event.transform);
+                });
+
+            svg.call(zoom);
+
+
+            var simulation = d3.forceSimulation(data.nodes)
+                .force("link", d3.forceLink(data.links).id(function (d) { return d.id; }).distance(225).strength(0.75))
+                .force("charge", d3.forceManyBody().distanceMin(50).strength(-900))
+                .force("center", d3.forceCenter(width / 2, height / 2).strength(0.15))
+                // .force("collision", d3.forceCollide().radius(20)); // Adding node-edge repulsion
+
+            var link = g.append("g")
+                .attr("class", "links")
+                .selectAll("line")
+                .data(data.links)
+                .enter().append("line")
+                .attr('id', function (d) { return `link-${d.source.id}-${d.target.id}`; })
+                .attr("stroke-width", 2)
+                .attr("stroke", "black")
+                //.attr("stroke-opacity", 0);
+                .style("opacity", 1);
+
+            var nodeGroup = g.append("g")
+                .attr("class", "node-group")
+                .selectAll("g")
+                .data(data.nodes)
+                .enter().append("g")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+            var node = nodeGroup.append("circle")
+                .attr("r", 25)
+                .attr('id', function (d) { return `node-${d.id}`; })
+                .attr("fill", "white")
+                .attr("stroke", "black")
+                .attr("stroke-width", 2);
+
+            var label = nodeGroup.append("text")
+                .attr("dy", 4.5)
+                .attr("dx", 0)
+                .attr('id', function (d) { return `label-${d.id}`; }) 
+                .attr("text-anchor", "middle")
+                .attr("font-family", "sans-serif")
+                .text(function (d) { return d.label; });
+
+            // color links in tree red
+            // link.style("stroke", function (d) {
+            //     return treeLinks.some(treeLink => treeLink.source === d.source && treeLink.target === d.target) ? "red" : "black";
+            // });
+
+            window.link = link;
+            window.node = node;
+            window.label = label;
+            simulation
+                .nodes(data.nodes)
+                .on("tick", ticked);
+
+            simulation.force("link")
+                .links(data.links);
+
+            function ticked() {
+                link
+                    .attr("x1", function (d) { return d.source.x; })
+                    .attr("y1", function (d) { return d.source.y; })
+                    .attr("x2", function (d) { return d.target.x; })
+                    .attr("y2", function (d) { return d.target.y; });
+
+                node
+                    .attr("cx", function (d) { return d.x; })
+                    .attr("cy", function (d) { return d.y; });
+
+                label
+                    .attr("x", function (d) { return d.x; })
+                    .attr("y", function (d) { return d.y; });
+            }
+
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3)
+                .restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragended(event, d) {
+                simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+        });
+
+        function step2(index) {
+
+            if(index == 0) link.style("opacity", 0);
+            var stepData = window.steps;
+
+            var source = stepData[index].source.id;
+            var target = stepData[index].target.id;
+
+            console.log(window.existingNodes);
+            
+            // select start and target nodes and set opacity to 1 and dashed stroke
+            node.style('opacity', function(d) { 
+                return window.existingNodes.includes(d.id) ? 1 : 0;
+            })
+            .attr('stroke-dasharray', null);
+
+            label.style('opacity', function(d) { 
+                return window.existingNodes.includes(d.id) ? 1 : 0;
+            });
+
+            link.filter(function(d) {
+                return d3.select(this).attr("exists");
+            }).attr("stroke-dasharray", null);
+
+            node.filter(function (d) {
+                if(window.existingNodes.includes(d.id)) return false;
+
+                return d.id === source || d.id === target;
+                
+                // return d.id === source || d.id === target;
+            }).attr("stroke-dasharray", "5,5")
+                .style("opacity", 1);
+
+            label.filter(function (d) {
+                if(window.existingNodes.includes(d.id)) return false;
+
+                return d.id === source || d.id === target;
+                
+                // return d.id === source || d.id === target;
+            }).style("opacity", 1)
+
+            
+            d3.select(`#link-${source}-${target}`).attr("stroke-dasharray", "5,5").style("opacity", 1)
+            .attr('exists', true);;
+                // .attr("stroke-dasharray", "5,5")
+                // .attr("stroke-opacity", 1);
+
+            window.existingNodes.push(source);
+            window.existingNodes.push(target);
+
+            window.counter++;
+
+            saveStepAsSVG();
+        }
+
+        function step(index) {
+            var startnode = window.data.nodes[index];
+            var targetnode = window.data.nodes[index + 1];
+
+            if (index === 0) {
+                window.existingNodes.push(startnode.id);
+                window.existingNodes.push(targetnode.id);
+            } else {
+                window.existingNodes.push(startnode.id);
+            }
+
+            // console.log(`La sourcente ${+startnode.id+1}, La destinazione ${+targetnode.id+1}`);
+
+            link.style("opacity", function (d) {
+                return window.existingNodes.includes(d.source.id) && window.existingNodes.includes(d.target.id) ? 1 : 0;
+            })
+                .attr('stroke-dasharray', null);
+
+            node.style("opacity", function (d) {
+                return window.existingNodes.includes(d.id) ? 1 : 0;
+            })
+                .attr('stroke-dasharray', null);
+
+            label.style("opacity", function (d) {
+                return window.existingNodes.includes(d.id) ? 1 : 0;
+            });
+
+            link.filter(function (d) {
+                const check = d.source.id === startnode.id && window.existingNodes.includes(d.target.id) ||
+                    d.target.id === startnode.id && window.existingNodes.includes(d.source.id);
+                if (check) console.log(`La sourcente ${d.source.id}, La destinazione ${d.target.id}`);
+
+                return check;
+            }).attr("stroke-dasharray", "5,5");
+            // console.log(`La sorgente ${}, La destinazione ${}`)
+            // console.log(links);
+
+
+
+            // links.forEach(a => {
+            //     console.log(a.__data__.source.id, a.__data__.target.id);
+            // });
+
+            node.filter(function (d) {
+                return d.id === startnode.id && window.existingNodes.includes(d.id);
+            }).attr("stroke-dasharray", "5,5");
+
+            window.counter++;
+
+            // console.log("STEP " + window.counter);
+            // saveStepAsSVG();
+        }
+
+        function saveStepAsSVG() {
+            const svgElement = document.getElementById("graph");
+            const serializer = new XMLSerializer();
+            const svgString = serializer.serializeToString(svgElement);
+            const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `step_${window.counter}.svg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+
+    <button onclick="step2(window.counter)">Step</button>
+
+</body>
+<svg id="graph" width="1800" height="1000"></svg>
+
+</html>
