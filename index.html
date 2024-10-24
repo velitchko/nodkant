@@ -94,9 +94,9 @@
                 }
             });
 
+            // THIS PART SETS THE STEPS (EDGE LIST) FOR THE SPANNING TREE VERSION
             window.steps = lastStep;
             window.steps.forEach(function (step) {
-                // console.log(step.source, step.target);
                 let sourceNode = data.nodes.find(node => node.id === step.source);
                 let targetNode = data.nodes.find(node => node.id === step.target);
                 console.log(`From: ${sourceNode.label}, To: ${targetNode.label}`);
@@ -119,12 +119,11 @@
 
             svg.call(zoom);
 
-
+            // HYPERPARAMETER HELL
             var simulation = d3.forceSimulation(data.nodes)
                 .force("link", d3.forceLink(data.links).id(function (d) { return d.id; }).distance(225).strength(0.75))
                 .force("charge", d3.forceManyBody().distanceMin(50).strength(-900))
                 .force("center", d3.forceCenter(width / 2, height / 2).strength(0.15))
-                // .force("collision", d3.forceCollide().radius(20)); // Adding node-edge repulsion
 
             var link = g.append("g")
                 .attr("class", "links")
@@ -162,14 +161,10 @@
                 .attr("font-family", "sans-serif")
                 .text(function (d) { return d.label; });
 
-            // color links in tree red
-            // link.style("stroke", function (d) {
-            //     return treeLinks.some(treeLink => treeLink.source === d.source && treeLink.target === d.target) ? "red" : "black";
-            // });
-
             window.link = link;
             window.node = node;
             window.label = label;
+
             simulation
                 .nodes(data.nodes)
                 .on("tick", ticked);
@@ -212,6 +207,7 @@
             }
         });
 
+        // THIS GOES OVER THE STEPS FOR THE TREE VERSION
         function step2(index) {
 
             if(index == 0) link.style("opacity", 0);
@@ -240,8 +236,6 @@
                 if(window.existingNodes.includes(d.id)) return false;
 
                 return d.id === source || d.id === target;
-                
-                // return d.id === source || d.id === target;
             }).attr("stroke-dasharray", "5,5")
                 .style("opacity", 1);
 
@@ -249,16 +243,11 @@
                 if(window.existingNodes.includes(d.id)) return false;
 
                 return d.id === source || d.id === target;
-                
-                // return d.id === source || d.id === target;
             }).style("opacity", 1)
 
             
             d3.select(`#link-${source}-${target}`).attr("stroke-dasharray", "5,5").style("opacity", 1)
-            .attr('exists', true);;
-                // .attr("stroke-dasharray", "5,5")
-                // .attr("stroke-opacity", 1);
-
+            .attr('exists', true);
             window.existingNodes.push(source);
             window.existingNodes.push(target);
 
@@ -278,7 +267,6 @@
                 window.existingNodes.push(startnode.id);
             }
 
-            // console.log(`La sourcente ${+startnode.id+1}, La destinazione ${+targetnode.id+1}`);
 
             link.style("opacity", function (d) {
                 return window.existingNodes.includes(d.source.id) && window.existingNodes.includes(d.target.id) ? 1 : 0;
@@ -297,18 +285,10 @@
             link.filter(function (d) {
                 const check = d.source.id === startnode.id && window.existingNodes.includes(d.target.id) ||
                     d.target.id === startnode.id && window.existingNodes.includes(d.source.id);
-                if (check) console.log(`La sourcente ${d.source.id}, La destinazione ${d.target.id}`);
+                if (check) console.log(`From: ${d.source.label}, To: ${d.target.id}`);
 
                 return check;
             }).attr("stroke-dasharray", "5,5");
-            // console.log(`La sorgente ${}, La destinazione ${}`)
-            // console.log(links);
-
-
-
-            // links.forEach(a => {
-            //     console.log(a.__data__.source.id, a.__data__.target.id);
-            // });
 
             node.filter(function (d) {
                 return d.id === startnode.id && window.existingNodes.includes(d.id);
@@ -316,8 +296,7 @@
 
             window.counter++;
 
-            // console.log("STEP " + window.counter);
-            // saveStepAsSVG();
+            saveStepAsSVG();
         }
 
         function saveStepAsSVG() {
